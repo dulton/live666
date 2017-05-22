@@ -38,7 +38,7 @@ protected:
         char* urlSuffix, unsigned urlSuffixMaxSize,
         char* sessionCookie, unsigned sessionCookieMaxSize,
         char* acceptStr, unsigned acceptStrMaxSize);
-    virtual void handleHTTPCmd_notSupported();
+    virtual void handleHTTPCmd_notSupported(); 
     virtual void handleHTTPCmd_notFound();
     virtual void handleHTTPCmd_OPTIONS();
     virtual void handleHTTPCmd_TunnelingGET(char const* sessionCookie);

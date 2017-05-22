@@ -1,5 +1,33 @@
 #include "MyRtspConnection.h"
 
+
+/*
+MediaSession
+    能够发送RTP和RTCP的类
+    提供SDP/媒体信息给RTSP
+    管理Subsession,提供媒体功能
+    有独立的密码
+
+MediaSubSession
+    设定SRC和DST
+    增加一个目的地址
+    
+MediaSessionMgr
+    管理MediaSession,全局唯一
+
+RTSPServer
+    监听554端口,accept后新建一个RTSPClientConnection
+
+XML-RPC
+    根据用户要求新建Dst和Src,如果可能,重用原有的并且增加一个目的地址
+
+RTSPClientConnection
+    保存每个客户端的连接关系,自带线程
+    根据要求新建Dst和Src,如果可能,重用原有的并且增加一个目的地址
+
+移除RTSPClientConnection中的streamState
+*/
+
 static void lookForHeader(char const* headerName, char const* source, unsigned sourceLen, char* resultStr, unsigned resultMaxSize);
 
 RTSPClientConnection::RTSPClientConnection(RTSPServer& ourServer, int clientSocket, struct sockaddr_in clientAddr)
@@ -220,6 +248,7 @@ typedef enum StreamingMode {
     RAW_UDP
 } StreamingMode;
 
+//这个函数改为std::string
 static void parseTransportHeader(char const* buf,
                                  StreamingMode& streamingMode,
                                  char*& streamingModeString,
@@ -295,6 +324,7 @@ static Boolean parsePlayNowHeader(char const* buf) {
     return True;
 }
 
+//fStreamStates应该移到MediaSession,使之管理subsession。为什么要在RTSPClientSession管理呢?
 void RTSPClientSession
 ::handleCmd_SETUP(RTSPServer::RTSPClientConnection* ourClientConnection,
                   char const* urlPreSuffix, char const* urlSuffix, char const* fullRequestStr) {
@@ -632,6 +662,7 @@ void RTSPClientSession
     }
 }
 
+//为什么要在fOurRTSPServer里管理TCP socket??
 void RTSPClientSession
 ::handleCmd_TEARDOWN(RTSPServer::RTSPClientConnection* ourClientConnection,
                      ServerMediaSubsession* subsession) {

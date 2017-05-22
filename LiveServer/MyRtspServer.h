@@ -2,7 +2,17 @@
 #include "DigestAuthentication.hh"
 
 
-class MyRTSPServer: public GenericMediaServer {
+#include "Media.hh"
+#include "ServerMediaSession.hh"
+
+#ifndef REQUEST_BUFFER_SIZE
+#define REQUEST_BUFFER_SIZE 20000 // for incoming requests
+#endif
+#ifndef RESPONSE_BUFFER_SIZE
+#define RESPONSE_BUFFER_SIZE 20000
+#endif
+
+class MyRTSPServer: public Medium {
 public:
     static MyRTSPServer* createNew(UsageEnvironment& env, Port ourPort = 554,
         UserAuthenticationDatabase* authDatabase = NULL,
@@ -12,9 +22,7 @@ public:
 
     char* rtspURLPrefix(int clientSocket = -1) const;
 
-
     UserAuthenticationDatabase* setAuthenticationDatabase(UserAuthenticationDatabase* newDB);
-
 
     void disableStreamingRTPOverTCP() {
         fAllowStreamingRTPOverTCP = False;
