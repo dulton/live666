@@ -6,7 +6,7 @@ MediaSession
     能够发送RTP和RTCP的类
     提供SDP/媒体信息给RTSP
     管理Subsession,提供媒体功能
-    有独立的密码
+    有独立的密码(被否决,RTSP没有根据SDP的)
 
 MediaSubSession
     设定SRC和DST
@@ -25,23 +25,26 @@ RTSPClientConnection
     保存每个客户端的连接关系,自带线程
     根据要求新建Dst和Src,如果可能,重用原有的并且增加一个目的地址
 
-移除RTSPClientConnection中的streamState
+step1: 移除RTSPClientConnection中的streamState
+step2: MyRTSPClientConnection可以多线程工作
+
 */
 
 static void lookForHeader(char const* headerName, char const* source, unsigned sourceLen, char* resultStr, unsigned resultMaxSize);
 
-RTSPClientConnection::RTSPClientConnection(RTSPServer& ourServer, int clientSocket, struct sockaddr_in clientAddr)
+MyRTSPClientConnection::MyRTSPClientConnection(RTSPServer& ourServer, int clientSocket, struct sockaddr_in clientAddr)
 :fOurRTSPServer(ourServer), fClientInputSocket(fOurSocket), fClientOutputSocket(fOurSocket),
 fIsActive(True), fRecursionCount(0), fOurSessionCookie(NULL) {
     incomingRequestHandler1();
     resetRequestBuffer();
+    //这里创建loop线程,接收并处理数据
 }
 
-RTSPClientConnection::~RTSPClientConnection() {
+MyRTSPClientConnection::~MyRTSPClientConnection() {
     closeSocketsRTSP();
 }
 
-Boolean RTSPClientConnection
+Boolean MyRTSPClientConnection
 ::authenticationOK(char const* cmdName, char const* urlSuffix, char const* fullRequestStr) {
     if (!fOurRTSPServer.specialClientAccessCheck(fClientInputSocket, fClientAddr, urlSuffix)) {
         setRTSPResponse("401 Unauthorized");
@@ -120,7 +123,7 @@ Boolean RTSPClientConnection
     return False;
 }
 
-void RTSPClientConnection
+void MyRTSPClientConnection
 ::setRTSPResponse(char const* responseStr) {
     snprintf((char*)fResponseBuffer, sizeof fResponseBuffer,
         "RTSP/1.0 %s\r\n"
@@ -131,7 +134,7 @@ void RTSPClientConnection
         dateHeader());
 }
 
-void RTSPClientConnection
+void MyRTSPClientConnection
 ::setRTSPResponse(char const* responseStr, u_int32_t sessionId) {
     snprintf((char*)fResponseBuffer, sizeof fResponseBuffer,
         "RTSP/1.0 %s\r\n"
@@ -144,7 +147,7 @@ void RTSPClientConnection
         sessionId);
 }
 
-void RTSPClientConnection
+void MyRTSPClientConnection
 ::setRTSPResponse(char const* responseStr, char const* contentStr) {
     if (contentStr == NULL) contentStr = "";
     unsigned const contentLen = strlen(contentStr);
@@ -162,7 +165,7 @@ void RTSPClientConnection
         contentStr);
 }
 
-void RTSPClientConnection
+void MyRTSPClientConnection
 ::setRTSPResponse(char const* responseStr, u_int32_t sessionId, char const* contentStr) {
     if (contentStr == NULL) contentStr = "";
     unsigned const contentLen = strlen(contentStr);
@@ -182,7 +185,7 @@ void RTSPClientConnection
         contentStr);
 }
 
-void RTSPClientConnection
+void MyRTSPClientConnection
 ::changeClientInputSocket(int newSocketNum, unsigned char const* extraData, unsigned extraDataSize) {
     envir().taskScheduler().disableBackgroundHandling(fClientInputSocket);
     fClientInputSocket = newSocketNum;
@@ -199,21 +202,12 @@ void RTSPClientConnection
     }
 }
 
-
-////////// RTSPServer::RTSPClientSession implementation //////////
-
-RTSPClientSession
-::RTSPClientSession(RTSPServer& ourServer, u_int32_t sessionId)
-: GenericMediaServer::ClientSession(ourServer, sessionId),
-fOurRTSPServer(ourServer), fIsMulticast(False), fStreamAfterSETUP(False),
-fTCPStreamIdCount(0), fNumStreamStates(0), fStreamStates(NULL) {
-}
-
-RTSPClientSession::~RTSPClientSession() {
+MyRTSPClientConnection::~RTSPClientSession() {
     reclaimStreamStates();
 }
 
-void RTSPClientSession::deleteStreamByTrack(unsigned trackNum) {
+/*
+void MyRTSPClientConnection::deleteStreamByTrack(unsigned trackNum) {
     if (trackNum >= fNumStreamStates) return; // sanity check; shouldn't happen
     if (fStreamStates[trackNum].subsession != NULL) {
         fStreamStates[trackNum].subsession->deleteStream(fOurSessionId, fStreamStates[trackNum].streamToken);
@@ -231,7 +225,7 @@ void RTSPClientSession::deleteStreamByTrack(unsigned trackNum) {
     if (noSubsessionsRemain) delete this;
 }
 
-void RTSPClientSession::reclaimStreamStates() {
+void MyRTSPClientConnection::reclaimStreamStates() {
     for (unsigned i = 0; i < fNumStreamStates; ++i) {
         if (fStreamStates[i].subsession != NULL) {
             fOurRTSPServer.unnoteTCPStreamingOnSocket(fStreamStates[i].tcpSocketNum, this, i);
@@ -241,6 +235,7 @@ void RTSPClientSession::reclaimStreamStates() {
     delete[] fStreamStates; fStreamStates = NULL;
     fNumStreamStates = 0;
 }
+*/
 
 typedef enum StreamingMode {
     RTP_UDP,
@@ -325,7 +320,7 @@ static Boolean parsePlayNowHeader(char const* buf) {
 }
 
 //fStreamStates应该移到MediaSession,使之管理subsession。为什么要在RTSPClientSession管理呢?
-void RTSPClientSession
+void MyRTSPClientConnection
 ::handleCmd_SETUP(RTSPServer::RTSPClientConnection* ourClientConnection,
                   char const* urlPreSuffix, char const* urlSuffix, char const* fullRequestStr) {
     // Normally, "urlPreSuffix" should be the session (stream) name, and "urlSuffix" should be the subsession (track) name.
@@ -338,7 +333,7 @@ void RTSPClientSession
     char* concatenatedStreamName = NULL; // in the normal case
 
     do {
-      // First, make sure the specified stream name exists:
+      // 这里改成通过MediaSessionMgr查找sms
       ServerMediaSession* sms
           = fOurServer.lookupServerMediaSession(streamName, fOurServerMediaSession == NULL);
       if (sms == NULL) {
@@ -401,14 +396,14 @@ void RTSPClientSession
           }
           if (trackNum >= fNumStreamStates) {
               // The specified track id doesn't exist, so this request fails:
-              ourClientConnection->handleCmd_notFound();
+              handleCmd_notFound();
               break;
           }
       } else {
           // Weird case: there was no track id in the URL.
           // This works only if we have only one subsession:
           if (fNumStreamStates != 1 || fStreamStates[0].subsession == NULL) {
-              ourClientConnection->handleCmd_bad();
+              handleCmd_bad();
               break;
           }
           trackNum = 0;
@@ -601,7 +596,7 @@ void RTSPClientSession
     delete[] concatenatedStreamName;
 }
 
-void RTSPClientSession
+void MyRTSPClientConnection
 ::handleCmd_withinSession(RTSPServer::RTSPClientConnection* ourClientConnection,
                           char const* cmdName,
                           char const* urlPreSuffix, char const* urlSuffix,
@@ -616,7 +611,7 @@ void RTSPClientSession
     ServerMediaSubsession* subsession;
 
     if (fOurServerMediaSession == NULL) { // There wasn't a previous SETUP!
-      ourClientConnection->handleCmd_notSupported();
+      handleCmd_notSupported();
       return;
     } else if (urlSuffix[0] != '\0' && strcmp(fOurServerMediaSession->streamName(), urlPreSuffix) == 0) {
       // Non-aggregated operation.
@@ -626,7 +621,7 @@ void RTSPClientSession
           if (strcmp(subsession->trackId(), urlSuffix) == 0) break; // success
       }
       if (subsession == NULL) { // no such track!
-          ourClientConnection->handleCmd_notFound();
+          handleCmd_notFound();
           return;
       }
     } else if (strcmp(fOurServerMediaSession->streamName(), urlSuffix) == 0 ||
@@ -641,7 +636,7 @@ void RTSPClientSession
           strcmp(&(fOurServerMediaSession->streamName())[urlPreSuffixLen+1], urlSuffix) == 0) {
               subsession = NULL;
       } else {
-          ourClientConnection->handleCmd_notFound();
+          handleCmd_notFound();
           return;
       }
     } else { // the request doesn't match a known stream and/or track at all!
@@ -663,7 +658,7 @@ void RTSPClientSession
 }
 
 //为什么要在fOurRTSPServer里管理TCP socket??
-void RTSPClientSession
+void MyRTSPClientConnection
 ::handleCmd_TEARDOWN(RTSPServer::RTSPClientConnection* ourClientConnection,
                      ServerMediaSubsession* subsession) {
     unsigned i;
@@ -692,7 +687,7 @@ void RTSPClientSession
     if (noSubsessionsRemain) delete this;
 }
 
-void RTSPClientSession
+void MyRTSPClientConnection
 ::handleCmd_PLAY(RTSPServer::RTSPClientConnection* ourClientConnection,
                  ServerMediaSubsession* subsession, char const* fullRequestStr) {
     char* rtspURL
@@ -903,7 +898,7 @@ void RTSPClientSession
     delete[] scaleHeader; delete[] rtspURL;
 }
 
-void RTSPClientSession
+void MyRTSPClientConnection
 ::handleCmd_PAUSE(RTSPServer::RTSPClientConnection* ourClientConnection,
                   ServerMediaSubsession* subsession) {
     for (unsigned i = 0; i < fNumStreamStates; ++i) {
@@ -918,7 +913,7 @@ void RTSPClientSession
     setRTSPResponse(ourClientConnection, "200 OK", fOurSessionId);
 }
 
-void RTSPClientSession
+void MyRTSPClientConnection
 ::handleCmd_GET_PARAMETER(RTSPServer::RTSPClientConnection* ourClientConnection,
                           ServerMediaSubsession* /*subsession*/, char const* /*fullRequestStr*/) {
 // By default, we implement "GET_PARAMETER" just as a 'keep alive', and send back a dummy response.
@@ -927,7 +922,7 @@ void RTSPClientSession
 setRTSPResponse(ourClientConnection, "200 OK", fOurSessionId, LIVEMEDIA_LIBRARY_VERSION_STRING);
 }
 
-void RTSPClientSession
+void MyRTSPClientConnection
 ::handleCmd_SET_PARAMETER(RTSPServer::RTSPClientConnection* ourClientConnection,
                           ServerMediaSubsession* /*subsession*/, char const* /*fullRequestStr*/) {
     // By default, we implement "SET_PARAMETER" just as a 'keep alive', and send back an empty response.
@@ -970,7 +965,7 @@ static void lookForHeader(char const* headerName, char const* source, unsigned s
 }
 
 
-void RTSPClientConnection::handleAlternativeRequestByte1(u_int8_t requestByte) {
+void MyRTSPClientConnection::handleAlternativeRequestByte1(u_int8_t requestByte) {
     if (requestByte == 0xFF) {
         // Hack: The new handler of the input TCP socket encountered an error reading it.  Indicate this:
         handleRequestBytes(-1);
@@ -986,7 +981,7 @@ void RTSPClientConnection::handleAlternativeRequestByte1(u_int8_t requestByte) {
     }
 }
 
-void RTSPClientConnection::handleRequestBytes(int newBytesRead) {
+void MyRTSPClientConnection::handleRequestBytes(int newBytesRead) {
     int numBytesRemaining = 0;
     ++fRecursionCount;
 

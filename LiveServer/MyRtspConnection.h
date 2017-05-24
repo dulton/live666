@@ -7,12 +7,10 @@ using namespace std;
 
 #define RTSP_BUFFER_SIZE 20000 // for incoming requests, and outgoing responses
 
-class RTSPClientConnection
+class MyRTSPClientConnection
 {
-protected: // redefined virtual functions:
-
-    RTSPClientConnection(RTSPServer& ourServer, int clientSocket, struct sockaddr_in clientAddr);
-    virtual ~RTSPClientConnection();
+    MyRTSPClientConnection(RTSPServer& ourServer, int clientSocket, struct sockaddr_in clientAddr);
+    virtual ~MyRTSPClientConnection();
 
 protected:
     virtual void handleRequestBytes(int newBytesRead);
@@ -95,6 +93,9 @@ protected:
     Boolean fIsMulticast, fStreamAfterSETUP;
     unsigned char fTCPStreamIdCount; // used for (optional) RTP/TCP
     Boolean usesTCPTransport() const { return fTCPStreamIdCount > 0; }
+    ServerMediaSession* fOurServerMediaSession;
+
+    //to be deleted
     unsigned fNumStreamStates;
     struct streamState {
         ServerMediaSubsession* subsession;
