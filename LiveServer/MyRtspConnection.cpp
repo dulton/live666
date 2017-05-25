@@ -1,5 +1,5 @@
 #include "MyRtspConnection.h"
-
+#include "MyServerMediaSession.hh"
 
 /*
 MediaSession
@@ -206,37 +206,6 @@ MyRTSPClientConnection::~RTSPClientSession() {
     reclaimStreamStates();
 }
 
-/*
-void MyRTSPClientConnection::deleteStreamByTrack(unsigned trackNum) {
-    if (trackNum >= fNumStreamStates) return; // sanity check; shouldn't happen
-    if (fStreamStates[trackNum].subsession != NULL) {
-        fStreamStates[trackNum].subsession->deleteStream(fOurSessionId, fStreamStates[trackNum].streamToken);
-        fStreamStates[trackNum].subsession = NULL;
-    }
-
-    // Optimization: If all subsessions have now been deleted, then we can delete ourself now:
-    Boolean noSubsessionsRemain = True;
-    for (unsigned i = 0; i < fNumStreamStates; ++i) {
-        if (fStreamStates[i].subsession != NULL) {
-            noSubsessionsRemain = False;
-            break;
-        }
-    }
-    if (noSubsessionsRemain) delete this;
-}
-
-void MyRTSPClientConnection::reclaimStreamStates() {
-    for (unsigned i = 0; i < fNumStreamStates; ++i) {
-        if (fStreamStates[i].subsession != NULL) {
-            fOurRTSPServer.unnoteTCPStreamingOnSocket(fStreamStates[i].tcpSocketNum, this, i);
-            fStreamStates[i].subsession->deleteStream(fOurSessionId, fStreamStates[i].streamToken);
-        }
-    }
-    delete[] fStreamStates; fStreamStates = NULL;
-    fNumStreamStates = 0;
-}
-*/
-
 typedef enum StreamingMode {
     RTP_UDP,
     RTP_TCP,
@@ -371,54 +340,9 @@ void MyRTSPClientConnection
           }
       }
 
-      if (fStreamStates == NULL) {
-          // This is the first "SETUP" for this session.  Set up our array of states for all of this session's subsessions (tracks):
-          fNumStreamStates = fOurServerMediaSession->numSubsessions();
-          fStreamStates = new struct streamState[fNumStreamStates];
+      //这里SETUP命令根据trackId查找subsession,如果找不到或者trackId为空返回各自错误
+      //如果是同一个用户第二次打开相同的trackId则从头播放???这段逻辑不明
 
-          ServerMediaSubsessionIterator iter(*fOurServerMediaSession);
-          ServerMediaSubsession* subsession;
-          for (unsigned i = 0; i < fNumStreamStates; ++i) {
-              subsession = iter.next();
-              fStreamStates[i].subsession = subsession;
-              fStreamStates[i].tcpSocketNum = -1; // for now; may get set for RTP-over-TCP streaming
-              fStreamStates[i].streamToken = NULL; // for now; it may be changed by the "getStreamParameters()" call that comes later
-          }
-      }
-
-      // Look up information for the specified subsession (track):
-      ServerMediaSubsession* subsession = NULL;
-      unsigned trackNum;
-      if (trackId != NULL && trackId[0] != '\0') { // normal case
-          for (trackNum = 0; trackNum < fNumStreamStates; ++trackNum) {
-              subsession = fStreamStates[trackNum].subsession;
-              if (subsession != NULL && strcmp(trackId, subsession->trackId()) == 0) break;
-          }
-          if (trackNum >= fNumStreamStates) {
-              // The specified track id doesn't exist, so this request fails:
-              handleCmd_notFound();
-              break;
-          }
-      } else {
-          // Weird case: there was no track id in the URL.
-          // This works only if we have only one subsession:
-          if (fNumStreamStates != 1 || fStreamStates[0].subsession == NULL) {
-              handleCmd_bad();
-              break;
-          }
-          trackNum = 0;
-          subsession = fStreamStates[trackNum].subsession;
-      }
-      // ASSERT: subsession != NULL
-
-      void*& token = fStreamStates[trackNum].streamToken; // alias
-      if (token != NULL) {
-          // We already handled a "SETUP" for this track (to the same client),
-          // so stop any existing streaming of it, before we set it up again:
-          subsession->pauseStream(fOurSessionId, token);
-          fOurRTSPServer.unnoteTCPStreamingOnSocket(fStreamStates[trackNum].tcpSocketNum, this, trackNum);
-          subsession->deleteStream(fOurSessionId, token);
-      }
 
       // Look for a "Transport:" header in the request string, to extract client parameters:
       StreamingMode streamingMode;
@@ -462,8 +386,8 @@ void MyRTSPClientConnection
       // Then, get server parameters from the 'subsession':
       if (streamingMode == RTP_TCP) {
           // Note that we'll be streaming over the RTSP TCP connection:
-          fStreamStates[trackNum].tcpSocketNum = ourClientConnection->fClientOutputSocket;
-          fOurRTSPServer.noteTCPStreamingOnSocket(fStreamStates[trackNum].tcpSocketNum, this, trackNum);
+//           fStreamStates[trackNum].tcpSocketNum = ourClientConnection->fClientOutputSocket;
+//           fOurRTSPServer.noteTCPStreamingOnSocket(fStreamStates[trackNum].tcpSocketNum, this, trackNum);
       }
       netAddressBits destinationAddress = 0;
       u_int8_t destinationTTL = 255;
@@ -492,12 +416,12 @@ void MyRTSPClientConnection
       ReceivingInterfaceAddr = SendingInterfaceAddr = sourceAddr.sin_addr.s_addr;
     #endif
 
-      subsession->getStreamParameters(fOurSessionId, ourClientConnection->fClientAddr.sin_addr.s_addr,
-          clientRTPPort, clientRTCPPort,
-          fStreamStates[trackNum].tcpSocketNum, rtpChannelId, rtcpChannelId,
-          destinationAddress, destinationTTL, fIsMulticast,
-          serverRTPPort, serverRTCPPort,
-          fStreamStates[trackNum].streamToken);
+//       subsession->getStreamParameters(fOurSessionId, ourClientConnection->fClientAddr.sin_addr.s_addr,
+//           clientRTPPort, clientRTCPPort,
+//           fStreamStates[trackNum].tcpSocketNum, rtpChannelId, rtcpChannelId,
+//           destinationAddress, destinationTTL, fIsMulticast,
+//           serverRTPPort, serverRTCPPort,
+//           fStreamStates[trackNum].streamToken);
       SendingInterfaceAddr = origSendingInterfaceAddr;
       ReceivingInterfaceAddr = origReceivingInterfaceAddr;
 
@@ -661,30 +585,12 @@ void MyRTSPClientConnection
 void MyRTSPClientConnection
 ::handleCmd_TEARDOWN(RTSPServer::RTSPClientConnection* ourClientConnection,
                      ServerMediaSubsession* subsession) {
-    unsigned i;
-    for (i = 0; i < fNumStreamStates; ++i) {
-     if (subsession == NULL /* means: aggregated operation */
-         || subsession == fStreamStates[i].subsession) {
-             if (fStreamStates[i].subsession != NULL) {
-                 fOurRTSPServer.unnoteTCPStreamingOnSocket(fStreamStates[i].tcpSocketNum, this, i);
-                 fStreamStates[i].subsession->deleteStream(fOurSessionId, fStreamStates[i].streamToken);
-                 fStreamStates[i].subsession = NULL;
-             }
-     }
-    }
+
+    fOurServerMediaSession->deleteStream(fOurSessionId, fStreamStates[i].streamToken);
 
     setRTSPResponse(ourClientConnection, "200 OK");
 
-    // Optimization: If all subsessions have now been torn down, then we know that we can reclaim our object now.
-    // (Without this optimization, however, this object would still get reclaimed later, as a result of a 'liveness' timeout.)
-    Boolean noSubsessionsRemain = True;
-    for (i = 0; i < fNumStreamStates; ++i) {
-     if (fStreamStates[i].subsession != NULL) {
-         noSubsessionsRemain = False;
-         break;
-     }
-    }
-    if (noSubsessionsRemain) delete this;
+    //这里删除当前MyRTSPClientConnection
 }
 
 void MyRTSPClientConnection
@@ -763,41 +669,35 @@ void MyRTSPClientConnection
     // (However, we don't do this if the "PLAY" request was for just a single subsession
     // of a multiple-subsession stream; for such streams, seeking/scaling can be done
     // only with an aggregate "PLAY".)
-    for (i = 0; i < fNumStreamStates; ++i) {
-     if (subsession == NULL /* means: aggregated operation */ || fNumStreamStates == 1) {
-         if (fStreamStates[i].subsession != NULL) {
-             if (sawScaleHeader) {
-                 fStreamStates[i].subsession->setStreamScale(fOurSessionId, fStreamStates[i].streamToken, scale);
-             }
-             if (absStart != NULL) {
-                 // Special case handling for seeking by 'absolute' time:
+    if (sawScaleHeader) {
+        fOurServerMediaSession->setStreamScale(fOurSessionId, fStreamStates[i].streamToken, scale);
+    }
+    if (absStart != NULL) {
+        // Special case handling for seeking by 'absolute' time:
 
-                 fStreamStates[i].subsession->seekStream(fOurSessionId, fStreamStates[i].streamToken, absStart, absEnd);
-             } else {
-                 // Seeking by relative (NPT) time:
+        fOurServerMediaSession->seekStream(fOurSessionId, fStreamStates[i].streamToken, absStart, absEnd);
+    } else {
+        // Seeking by relative (NPT) time:
 
-                 u_int64_t numBytes;
-                 if (!sawRangeHeader || startTimeIsNow) {
-                     // We're resuming streaming without seeking, so we just do a 'null' seek
-                     // (to get our NPT, and to specify when to end streaming):
-                     fStreamStates[i].subsession->nullSeekStream(fOurSessionId, fStreamStates[i].streamToken,
-                         rangeEnd, numBytes);
-                 } else {
-                     // We do a real 'seek':
-                     double streamDuration = 0.0; // by default; means: stream until the end of the media
-                     if (rangeEnd > 0.0 && (rangeEnd+0.001) < duration) {
-                         // the 0.001 is because we limited the values to 3 decimal places
-                         // We want the stream to end early.  Set the duration we want:
-                         streamDuration = rangeEnd - rangeStart;
-                         if (streamDuration < 0.0) streamDuration = -streamDuration;
-                         // should happen only if scale < 0.0
-                     }
-                     fStreamStates[i].subsession->seekStream(fOurSessionId, fStreamStates[i].streamToken,
-                         rangeStart, streamDuration, numBytes);
-                 }
-             }
-         }
-     }
+        u_int64_t numBytes;
+        if (!sawRangeHeader || startTimeIsNow) {
+            // We're resuming streaming without seeking, so we just do a 'null' seek
+            // (to get our NPT, and to specify when to end streaming):
+            fOurServerMediaSession->nullSeekStream(fOurSessionId, fStreamStates[i].streamToken,
+                rangeEnd, numBytes);
+        } else {
+            // We do a real 'seek':
+            double streamDuration = 0.0; // by default; means: stream until the end of the media
+            if (rangeEnd > 0.0 && (rangeEnd+0.001) < duration) {
+                // the 0.001 is because we limited the values to 3 decimal places
+                // We want the stream to end early.  Set the duration we want:
+                streamDuration = rangeEnd - rangeStart;
+                if (streamDuration < 0.0) streamDuration = -streamDuration;
+                // should happen only if scale < 0.0
+            }
+            fOurServerMediaSession->seekStream(fOurSessionId, fStreamStates[i].streamToken,
+                rangeStart, streamDuration, numBytes);
+        }
     }
 
     // Create the "Range:" header that we'll send back in our response.
@@ -815,18 +715,8 @@ void MyRTSPClientConnection
      if (!sawRangeHeader || startTimeIsNow) {
          // We didn't seek, so in our response, begin the range with the current NPT (normal play time):
          float curNPT = 0.0;
-         for (i = 0; i < fNumStreamStates; ++i) {
-             if (subsession == NULL /* means: aggregated operation */
-                 || subsession == fStreamStates[i].subsession) {
-                     if (fStreamStates[i].subsession == NULL) continue;
-                     float npt = fStreamStates[i].subsession->getCurrentNPT(fStreamStates[i].streamToken);
-                     if (npt > curNPT) curNPT = npt;
-                     // Note: If this is an aggregate "PLAY" on a multi-subsession stream,
-                     // then it's conceivable that the NPTs of each subsession may differ
-                     // (if there has been a previous seek on just one subsession).
-                     // In this (unusual) case, we just return the largest NPT; I hope that turns out OK...
-             }
-         }
+         float npt = fOurServerMediaSession->getCurrentNPT(fStreamStates[i].streamToken);
+         if (npt > curNPT) curNPT = npt;
          rangeStart = curNPT;
      }
 

@@ -185,6 +185,14 @@
 				>
 			</File>
 			<File
+				RelativePath=".\Live555Client.cpp"
+				>
+			</File>
+			<File
+				RelativePath=".\Live555Client.h"
+				>
+			</File>
+			<File
 				RelativePath=".\mediaServer\live555MediaServer.cpp"
 				>
 			</File>
@@ -210,6 +218,14 @@
 			</File>
 			<File
 				RelativePath=".\MyRtspServer.h"
+				>
+			</File>
+			<File
+				RelativePath=".\MyServerMediaSession.cpp"
+				>
+			</File>
+			<File
+				RelativePath=".\MyServerMediaSession.hh"
 				>
 			</File>
 			<File
