@@ -1268,24 +1268,24 @@ RTSPServer::RTSPClientSession
 }
 
 RTSPServer::RTSPClientSession::~RTSPClientSession() {
-  // Turn off any liveness checking:
-  envir().taskScheduler().unscheduleDelayedTask(fLivenessCheckTask);
+    // Turn off any liveness checking:
+    envir().taskScheduler().unscheduleDelayedTask(fLivenessCheckTask);
 
-  // Remove ourself from the server's 'client sessions' hash table before we go:
-  char sessionIdStr[9];
-  sprintf(sessionIdStr, "%08X", fOurSessionId);
-  fOurServer.fClientSessions->Remove(sessionIdStr);
+    // Remove ourself from the server's 'client sessions' hash table before we go:
+    char sessionIdStr[9];
+    sprintf(sessionIdStr, "%08X", fOurSessionId);
+    fOurServer.fClientSessions->Remove(sessionIdStr);
 
-  reclaimStreamStates();
+    reclaimStreamStates();
 
-  if (fOurServerMediaSession != NULL) {
-    fOurServerMediaSession->decrementReferenceCount();
-    if (fOurServerMediaSession->referenceCount() == 0
-	&& fOurServerMediaSession->deleteWhenUnreferenced()) {
-      fOurServer.removeServerMediaSession(fOurServerMediaSession);
-      fOurServerMediaSession = NULL;
+    if (fOurServerMediaSession != NULL) {
+        fOurServerMediaSession->decrementReferenceCount();
+        if (fOurServerMediaSession->referenceCount() == 0
+        && fOurServerMediaSession->deleteWhenUnreferenced()) {
+          fOurServer.removeServerMediaSession(fOurServerMediaSession);
+          fOurServerMediaSession = NULL;
+        }
     }
-  }
 }
 
 void RTSPServer::RTSPClientSession::reclaimStreamStates() {

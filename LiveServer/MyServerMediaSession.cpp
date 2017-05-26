@@ -15,24 +15,7 @@ MyServerMediaSession* MyServerMediaSession
 				isSSM, miscSDPLines);
 }
 
-Boolean MyServerMediaSession
-::lookupByName(UsageEnvironment& env, char const* mediumName,
-	       MyServerMediaSession*& resultSession) {
-  resultSession = NULL; // unless we succeed
-
-  Medium* medium;
-  if (!Medium::lookupByName(env, mediumName, medium)) return False;
-
-  if (!medium->isServerMediaSession()) {
-    env.setResultMsg(mediumName, " is not a 'ServerMediaSession' object");
-    return False;
-  }
-
-  resultSession = (MyServerMediaSession*)medium;
-  return True;
-}
-
-static char const* const libNameStr = "LIVE555 Streaming Media v";
+static char const* const libNameStr = "LIVE666 Streaming Media v";
 char const* const libVersionStr = LIVEMEDIA_LIBRARY_VERSION_STRING;
 
 MyServerMediaSession::MyServerMediaSession(UsageEnvironment& env,

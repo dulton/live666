@@ -7,14 +7,16 @@ using namespace std;
 
 #define RTSP_BUFFER_SIZE 20000 // for incoming requests, and outgoing responses
 
+class MediaSessionMgr
+
 class MyRTSPClientConnection
 {
-    MyRTSPClientConnection(RTSPServer& ourServer, int clientSocket, struct sockaddr_in clientAddr);
+    MyRTSPClientConnection(RTSPServer& ourServer, MediaSessionMgr* SessinMgr,
+        int clientSocket, struct sockaddr_in clientAddr);
     virtual ~MyRTSPClientConnection();
 
 protected:
     virtual void handleRequestBytes(int newBytesRead);
-
     // Make the handler functions for each command virtual, to allow subclasses to reimplement them, if necessary:
     virtual void handleCmd_OPTIONS();
     // You probably won't need to subclass/reimplement this function; reimplement "RTSPServer::allowedCommandNames()" instead.
@@ -43,26 +45,17 @@ protected:
     virtual Boolean handleHTTPCmd_TunnelingPOST(char const* sessionCookie, unsigned char const* extraData, unsigned extraDataSize);
     virtual void handleHTTPCmd_StreamingGET(char const* urlSuffix, char const* fullRequestStr);
     // Make the handler functions for each command virtual, to allow subclasses to redefine them:
-    virtual void handleCmd_SETUP(RTSPClientConnection* ourClientConnection,
-        char const* urlPreSuffix, char const* urlSuffix, char const* fullRequestStr);
-    virtual void handleCmd_withinSession(RTSPClientConnection* ourClientConnection,
-        char const* cmdName,
+    virtual void handleCmd_SETUP(char const* urlPreSuffix, char const* urlSuffix, char const* fullRequestStr);
+    virtual void handleCmd_withinSession(char const* cmdName,
         char const* urlPreSuffix, char const* urlSuffix,
         char const* fullRequestStr);
-    virtual void handleCmd_TEARDOWN(RTSPClientConnection* ourClientConnection,
-        ServerMediaSubsession* subsession);
-    virtual void handleCmd_PLAY(RTSPClientConnection* ourClientConnection,
-        ServerMediaSubsession* subsession, char const* fullRequestStr);
-    virtual void handleCmd_PAUSE(RTSPClientConnection* ourClientConnection,
-        ServerMediaSubsession* subsession);
-    virtual void handleCmd_GET_PARAMETER(RTSPClientConnection* ourClientConnection,
-        ServerMediaSubsession* subsession, char const* fullRequestStr);
-    virtual void handleCmd_SET_PARAMETER(RTSPClientConnection* ourClientConnection,
-        ServerMediaSubsession* subsession, char const* fullRequestStr);
+    virtual void handleCmd_TEARDOWN();
+    virtual void handleCmd_PLAY(char const* fullRequestStr);
+    virtual void handleCmd_PAUSE();
+    virtual void handleCmd_GET_PARAMETER(char const* fullRequestStr);
+    virtual void handleCmd_SET_PARAMETER(char const* fullRequestStr);
     void deleteStreamByTrack(unsigned trackNum);
-    void reclaimStreamStates();
     Boolean isMulticast() const { return fIsMulticast; }
-
 protected:
     void resetRequestBuffer();
     void closeSocketsRTSP();
@@ -93,5 +86,12 @@ protected:
     Boolean fIsMulticast, fStreamAfterSETUP;
     unsigned char fTCPStreamIdCount; // used for (optional) RTP/TCP
     Boolean usesTCPTransport() const { return fTCPStreamIdCount > 0; }
-    MyServerMediaSession* fOurServerMediaSession;
+
+    unsigned fReclamationSeconds;
+
+    string fSessionName;
+    string fTrackName;
+    int fOurSessionId;
+
+    MediaSessionMgr& fMediaSessionMgr;
 };

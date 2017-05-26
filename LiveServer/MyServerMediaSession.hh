@@ -118,7 +118,6 @@ public:
 				   Boolean& isMulticast, // out
 				   Port& serverRTPPort, // out
 				   Port& serverRTCPPort, // out
-				   void*& streamToken // out
 				   ) = 0;
   virtual void startStream(unsigned clientSessionId, void* streamToken,
 			   TaskFunc* rtcpRRHandler,

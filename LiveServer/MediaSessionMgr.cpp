@@ -7,6 +7,10 @@
 
 ////////// GenericMediaServer implementation //////////
 
+ServerMediaSession* MediaSessionMgr::requestMediaSession(char const* streamName)
+{
+    
+}
 void MediaSessionMgr::addServerMediaSession(ServerMediaSession* serverMediaSession) {
     if (serverMediaSession == NULL) return;
 
