@@ -24,10 +24,6 @@ public:
 				       Boolean isSSM = False,
 				       char const* miscSDPLines = NULL);
 
-  static Boolean lookupByName(UsageEnvironment& env,
-                              char const* mediumName,
-                              MyServerMediaSession*& resultSession);
-
   string generateSDPDescription(); // based on the entire session
       // Note: The caller is responsible for freeing the returned string
 
@@ -74,6 +70,10 @@ public:
     //   you must first close any client connections that use it,
     //   by calling "RTSPServer::closeAllClientSessionsForServerMediaSession()".
 
+  Boolean authenticationOK(string cmdName, string uri, string UserName, string Password,
+      string realm, string nonce,
+      string& response);
+
 protected:
   MyServerMediaSession(UsageEnvironment& env, char const* streamName,
 		     char const* info, char const* description,
@@ -99,6 +99,11 @@ private:
   string           fMiscSDPLines;
   SubType          subSessions;
   string           destinationAddr;
+  string           userName;
+  string           password;
+  Boolean          passwordIsMd5;
+  Authenticator    fAuth; // used if access control is needed
+
 };
 
 class MyServerMediaSubsession: public Medium {

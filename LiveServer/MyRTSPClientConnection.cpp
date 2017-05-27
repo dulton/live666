@@ -1,4 +1,4 @@
-#include "MyRtspConnection.h"
+#include "MyRTSPClientConnection.h"
 #include "MyServerMediaSession.hh"
 
 /*
@@ -40,7 +40,7 @@ XML-RPC
 ...
 
 
-fMediaSessionMgr调用要判断错误返回
+每个对fMediaSessionMgr的调用要判断错误返回
 */
 
 static void lookForHeader(char const* headerName, char const* source, unsigned sourceLen, char* resultStr, unsigned resultMaxSize);
@@ -59,18 +59,11 @@ MyRTSPClientConnection::~MyRTSPClientConnection() {
 
 Boolean MyRTSPClientConnection
 ::authenticationOK(char const* cmdName, char const* urlSuffix, char const* fullRequestStr) {
-    if (!fOurRTSPServer.specialClientAccessCheck(fClientInputSocket, fClientAddr, urlSuffix)) {
-        setRTSPResponse("401 Unauthorized");
-        return False;
-    }
-
-    // If we weren't set up with an authentication database, we're OK:
-    UserAuthenticationDatabase* authDB = fOurRTSPServer.getAuthenticationDatabaseForCommand(cmdName);
-    if (authDB == NULL) return True;
 
     char const* username = NULL; char const* realm = NULL; char const* nonce = NULL;
     char const* uri = NULL; char const* response = NULL;
     Boolean success = False;
+    string ourResponse;
 
     do {
         // To authenticate, we first need to have a nonce set up
@@ -89,20 +82,8 @@ Boolean MyRTSPClientConnection
                 break;
         }
 
-        // Next, the username has to be known to us:
-        char const* password = authDB->lookupPassword(username);
-#ifdef DEBUG
-        fprintf(stderr, "lookupPassword(%s) returned password %s\n", username, password);
-#endif
-        if (password == NULL) break;
-        fCurrentAuthenticator.setUsernameAndPassword(username, password, authDB->passwordsAreMD5());
+        success = fMediaSessionMgr.authenticationOK(fSessionName, uri, username, , realm, nonce, ourResponse);
 
-        // Finally, compute a digest response from the information that we have,
-        // and compare it to the one that we were given:
-        char const* ourResponse
-            = fCurrentAuthenticator.computeDigestResponse(cmdName, uri);
-        success = (strcmp(ourResponse, response) == 0);
-        fCurrentAuthenticator.reclaimDigestResponse(ourResponse);
     } while (0);
 
     delete[] (char*)realm; delete[] (char*)nonce;
@@ -376,6 +357,7 @@ void MyRTSPClientConnection
     ReceivingInterfaceAddr = SendingInterfaceAddr = sourceAddr.sin_addr.s_addr;
 #endif
     
+    //设置发送参数,获得一些参数
     fMediaSessionMgr.getStreamParameters(fSessionName, fOurSessionId, 
         fClientAddr.sin_addr.s_addr,
         clientRTPPort, 

@@ -71,6 +71,11 @@ public:
         Port& serverRTCPPort, // out
         void*& streamToken // out
         );
+
+    Boolean authenticationOK(string Name, string uri, string UserName, string Password,
+        string realm, string nonce,
+        string& response);
+
 private:
     virtual ServerMediaSession*
         lookupServerMediaSession(char const* streamName, Boolean isFirstLookupInSession = True);

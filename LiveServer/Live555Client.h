@@ -7,6 +7,8 @@
 #include <thread>
 #include <vector>
 
+namespace LIVE55{
+
 // here are taken from vlc
 
 enum es_format_category_e
@@ -662,20 +664,31 @@ public:
     void setRTPPortBegin(unsigned short port_begin) { u_port_begin = port_begin; }
     unsigned short getRTPPortNoUse() { return u_port_begin; }
 
+    //流信息
+    virtual void onInitializedTrack(LiveTrack* track) {}
+
+    //流结束
+    virtual void onEOF() {}
+
+    //一帧数据
+    virtual void onData(LiveTrack* track, uint8_t* p_buffer, int i_size, int i_truncated_bytes, int64_t pts, int64_t dts) {}
+    virtual void onResetPcr(){}
+    virtual void onDataTimeOut(){}
+
+    //线程退出
+    virtual void onQuit(int status) {}
+    virtual void onDebug(const char* msg){}
+private:
+    void onStreamClose(LiveTrack* track);
     // callback functions
     void continueAfterDESCRIBE( int result_code, char* result_string );
     void continueAfterOPTIONS( int result_code, char* result_string );
     void live555Callback( int result_code );
     void onStreamRead(LiveTrack* track, unsigned int i_size,
-                        unsigned int i_truncated_bytes, struct timeval pts,
-                        unsigned int duration );
-    void onStreamClose(LiveTrack* track);
-    virtual void onInitializedTrack(LiveTrack* track) {}
-    virtual void onEOF() {}
-    virtual void onData(LiveTrack* track, uint8_t* p_buffer, int i_size, int i_truncated_bytes, int64_t pts, int64_t dts) {}
-    virtual void onResetPcr(){}
-    virtual void onDataTimeOut(){}
-    virtual void onDebug(const char* msg){}
+        unsigned int i_truncated_bytes, struct timeval pts,
+        unsigned int duration );
 };
+
+}//LIVE555 namespace
 
 #endif//LIVE555_CLIENT_H__

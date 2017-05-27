@@ -187,6 +187,8 @@ ret0:
 
 static inline Boolean toBool( bool b ) { return b?True:False; } // silly, no?
 
+using namespace LIVE55;
+
 static /* Base64 decoding */
 size_t vlc_b64_decode_binary_to_buffer( uint8_t *p_dst, size_t i_dst, const char *p_src )
 {
@@ -1118,9 +1120,14 @@ void Live555Client::demux_loop(void* opaque)
             pThis->b_do_control_pause_state = false;
         }
 
-        pThis->demux();
+        int r = pThis->demux();
+        if (r == TIME_OUT){
+            i_live555_ret = 408;//http time out code
+            break;
+        }
     }
-
+    
+    pThis->onQuit(i_live555_ret);
 }
 
 Live555Client::Live555Client(void)

@@ -79,7 +79,6 @@ protected:
     unsigned char fResponseBuffer[RTSP_BUFFER_SIZE];
     unsigned fRecursionCount;
     char const* fCurrentCSeq;
-    Authenticator fCurrentAuthenticator; // used if access control is needed
     char* fOurSessionCookie; // used for optional RTSP-over-HTTP tunneling
     unsigned fBase64RemainderCount; // used for optional RTSP-over-HTTP tunneling (possible values: 0,1,2,3)
 

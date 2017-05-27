@@ -178,6 +178,24 @@ void MyServerMediaSession::deleteAllSubsessions() {
     }
 }
 
+Boolean MyServerMediaSession::authenticationOK(string cmdName, string uri, string UserName, string Password,
+                                               string& response)
+{
+#ifdef DEBUG
+    fprintf(stderr, "lookupPassword(%s) returned password %s\n", username, password);
+#endif
+    if (password == NULL) break;
+    fAuth.setUsernameAndPassword(UserName.c_str(), Password.c_str(), passwordIsMd5);
+
+    // Finally, compute a digest response from the information that we have,
+    // and compare it to the one that we were given:
+    char const* ourResponse
+        = fAuth.computeDigestResponse(cmdName, uri);
+    Boolean success = (strcmp(ourResponse, response) == 0);
+    fAuth.reclaimDigestResponse(ourResponse);
+    return success;
+}
+
 Boolean MyServerMediaSession::isServerMediaSession() const {
   return True;
 }
