@@ -1,6 +1,11 @@
 #include "MyRTSPClientConnection.h"
 #include "MyServerMediaSession.hh"
+#include "MediaSessionMgr.h"
 
+#include <stdlib.h>
+
+#include "RTSPCommon.hh"
+#include "groupsockhelper.hh"
 /*
 --------------------------------------------------------------------µ×²ã
 
@@ -45,8 +50,8 @@ XML-RPC
 
 static void lookForHeader(char const* headerName, char const* source, unsigned sourceLen, char* resultStr, unsigned resultMaxSize);
 
-MyRTSPClientConnection::MyRTSPClientConnection(RTSPServer& ourServer, int fOurSocket, struct sockaddr_in clientAddr)
-:fOurRTSPServer(ourServer), fClientInputSocket(fOurSocket), fClientOutputSocket(fOurSocket),
+MyRTSPClientConnection::MyRTSPClientConnection(MediaSessionMgr* SessinMgr, int fOurSocket, struct sockaddr_in clientAddr)
+:fClientInputSocket(fOurSocket), fClientOutputSocket(fOurSocket),
 fIsActive(True), fRecursionCount(0), fOurSessionCookie(NULL) {
     incomingRequestHandler1();
     resetRequestBuffer();
@@ -55,6 +60,13 @@ fIsActive(True), fRecursionCount(0), fOurSessionCookie(NULL) {
 
 MyRTSPClientConnection::~MyRTSPClientConnection() {
     closeSocketsRTSP();
+}
+
+void MyRTSPClientConnection::incomingRequestHandler1() {
+    struct sockaddr_in dummy; // 'from' address, meaningless in this case
+
+    int bytesRead = readSocket(envir(), fClientInputSocket, &fRequestBuffer[fRequestBytesAlreadySeen], fRequestBufferBytesLeft, dummy);
+    handleRequestBytes(bytesRead);
 }
 
 Boolean MyRTSPClientConnection
@@ -382,6 +394,7 @@ void MyRTSPClientConnection
     } else {
         timeoutParameterString[0] = '\0';
     }
+    do{
     if (fIsMulticast) {
         switch (streamingMode) {
             case RTP_UDP: {
@@ -464,8 +477,7 @@ void MyRTSPClientConnection
 
 }
 
-void MyRTSPClientConnection
-::handleCmd_withinSession(char const* cmdName,
+void MyRTSPClientConnection::handleCmd_withinSession(char const* cmdName,
                           char const* urlPreSuffix, char const* urlSuffix,
                           char const* fullRequestStr) {
     // This will either be:
@@ -664,9 +676,7 @@ void MyRTSPClientConnection::handleCmd_PAUSE()
     setRTSPResponse("200 OK", fOurSessionId);
 }
 
-void MyRTSPClientConnection
-::handleCmd_GET_PARAMETER(RTSPServer::RTSPClientConnection* ourClientConnection,
-                          ServerMediaSubsession* /*subsession*/, char const* /*fullRequestStr*/) {
+void MyRTSPClientConnection::handleCmd_GET_PARAMETER(MyServerMediaSubsession* /*subsession*/, char const* /*fullRequestStr*/) {
 // By default, we implement "GET_PARAMETER" just as a 'keep alive', and send back a dummy response.
 // (If you want to handle "GET_PARAMETER" properly, you can do so by defining a subclass of "RTSPServer"
 // and "RTSPServer::RTSPClientSession", and then reimplement this virtual function in your subclass.)
@@ -674,7 +684,7 @@ setRTSPResponse("200 OK", fOurSessionId, LIVEMEDIA_LIBRARY_VERSION_STRING);
 }
 
 void MyRTSPClientConnection
-::handleCmd_SET_PARAMETER(ServerMediaSubsession* /*subsession*/, char const* /*fullRequestStr*/) {
+::handleCmd_SET_PARAMETER(MyServerMediaSubsession* /*subsession*/, char const* /*fullRequestStr*/) {
     // By default, we implement "SET_PARAMETER" just as a 'keep alive', and send back an empty response.
     // (If you want to handle "SET_PARAMETER" properly, you can do so by defining a subclass of "RTSPServer"
     // and "RTSPServer::RTSPClientSession", and then reimplement this virtual function in your subclass.)

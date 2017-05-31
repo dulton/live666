@@ -5,7 +5,7 @@
 #include <map>
 
 using namespace std;
-class ServerMediaSession;
+class MyServerMediaSession;
 
 /*
 线程安全的ServerMediaSession管理类。能够增加,删除,查找,控制快进,播放,暂停,这是一个总的媒体控制类
@@ -23,15 +23,15 @@ xml-rpc和rtsp端口都直接控制这个类
 
 class MediaSessionMgr
 {
-    typedef map<string, ServerMediaSession*> MediaSessionMap_t;
+    typedef map<string, MyServerMediaSession*> MediaSessionMap_t;
     typedef MediaSessionMap_t::iterator SessionIt_t;
-    typedef pair<string, ServerMediaSession*> MediaSessionType;
+    typedef pair<string, MyServerMediaSession*> MediaSessionType;
 public:
     //根据一个名称创建MediaSession
-    ServerMediaSession* requestMediaSession(char const* streamName);
+    MyServerMediaSession* requestMediaSession(char const* streamName);
 
     //创建一个自定义的MediaSession
-    int addServerMediaSession(ServerMediaSession* serverMediaSession);
+    int addServerMediaSession(MyServerMediaSession* serverMediaSession);
 
     int removeServerMediaSession(string Name);
 
@@ -77,14 +77,14 @@ public:
         string& response);
 
 private:
-    virtual ServerMediaSession*
+    virtual MyServerMediaSession*
         lookupServerMediaSession(char const* streamName, Boolean isFirstLookupInSession = True);
 
-    void removeServerMediaSession(ServerMediaSession* serverMediaSession);
+    void removeServerMediaSession(MyServerMediaSession* serverMediaSession);
 
-    void deleteServerMediaSession(ServerMediaSession* serverMediaSession);
+    void deleteServerMediaSession(MyServerMediaSession* serverMediaSession);
 
-    unsigned numClientSessions() const { return m_mMediaSessions->size(); }
+    unsigned numClientSessions() const { return m_mMediaSessions.size(); }
 private:
     MediaSessionMap_t m_mMediaSessions;
 };

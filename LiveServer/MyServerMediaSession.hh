@@ -7,6 +7,8 @@
 #include "RTCP.hh"
 #endif
 
+#include "DigestAuthentication.hh"
+
 using namespace std;
 
 class MyServerMediaSubsession;
@@ -70,7 +72,7 @@ public:
     //   you must first close any client connections that use it,
     //   by calling "RTSPServer::closeAllClientSessionsForServerMediaSession()".
 
-  Boolean authenticationOK(string cmdName, string uri, string UserName, string Password,
+  Boolean authenticationOK(string uri, string UserName, string Password,
       string realm, string nonce,
       string& response);
 
@@ -122,7 +124,7 @@ public:
 				   u_int8_t& destinationTTL, // in out
 				   Boolean& isMulticast, // out
 				   Port& serverRTPPort, // out
-				   Port& serverRTCPPort, // out
+				   Port& serverRTCPPort // out
 				   ) = 0;
   virtual void startStream(unsigned clientSessionId, void* streamToken,
 			   TaskFunc* rtcpRRHandler,

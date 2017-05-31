@@ -3,15 +3,17 @@
 #include <vector>
 #include <string>
 
+#include "usageenvironment.hh"
+
 using namespace std;
 
 #define RTSP_BUFFER_SIZE 20000 // for incoming requests, and outgoing responses
 
-class MediaSessionMgr
+class MediaSessionMgr;
 
 class MyRTSPClientConnection
 {
-    MyRTSPClientConnection(RTSPServer& ourServer, MediaSessionMgr* SessinMgr,
+    MyRTSPClientConnection(MediaSessionMgr* SessinMgr,
         int clientSocket, struct sockaddr_in clientAddr);
     virtual ~MyRTSPClientConnection();
 
@@ -52,8 +54,6 @@ protected:
     virtual void handleCmd_TEARDOWN();
     virtual void handleCmd_PLAY(char const* fullRequestStr);
     virtual void handleCmd_PAUSE();
-    virtual void handleCmd_GET_PARAMETER(char const* fullRequestStr);
-    virtual void handleCmd_SET_PARAMETER(char const* fullRequestStr);
     void deleteStreamByTrack(unsigned trackNum);
     Boolean isMulticast() const { return fIsMulticast; }
 protected:
@@ -63,13 +63,14 @@ protected:
     void handleAlternativeRequestByte1(u_int8_t requestByte);
     Boolean authenticationOK(char const* cmdName, char const* urlSuffix, char const* fullRequestStr);
     void changeClientInputSocket(int newSocketNum, unsigned char const* extraData, unsigned extraDataSize);
+    void incomingRequestHandler1();
+    UsageEnvironment& envir() { return fEnv; }
     // Shortcuts for setting up a RTSP response (prior to sending it):
     void setRTSPResponse(char const* responseStr);
     void setRTSPResponse(char const* responseStr, u_int32_t sessionId);
     void setRTSPResponse(char const* responseStr, char const* contentStr);
     void setRTSPResponse(char const* responseStr, u_int32_t sessionId, char const* contentStr);
 
-    RTSPServer& fOurServer;
     Boolean fIsActive;
     int fClientInputSocket, fClientOutputSocket;
     struct sockaddr_in fClientAddr;
@@ -91,6 +92,9 @@ protected:
     string fSessionName;
     string fTrackName;
     int fOurSessionId;
+
+    //内部建立的循环
+    UsageEnvironment& fEnv;
 
     MediaSessionMgr& fMediaSessionMgr;
 };
