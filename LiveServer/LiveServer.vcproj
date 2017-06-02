@@ -229,6 +229,14 @@
 				>
 			</File>
 			<File
+				RelativePath=".\MyThread.cpp"
+				>
+			</File>
+			<File
+				RelativePath=".\MyThread.h"
+				>
+			</File>
+			<File
 				RelativePath=".\RTSPServer.cpp"
 				>
 				<FileConfiguration

@@ -13,7 +13,8 @@ class MediaSessionMgr;
 
 class MyRTSPClientConnection
 {
-    MyRTSPClientConnection(MediaSessionMgr* SessinMgr,
+public:
+    MyRTSPClientConnection(MediaSessionMgr& SessinMgr,
         int clientSocket, struct sockaddr_in clientAddr);
     virtual ~MyRTSPClientConnection();
 
@@ -57,6 +58,8 @@ protected:
     void deleteStreamByTrack(unsigned trackNum);
     Boolean isMulticast() const { return fIsMulticast; }
 protected:
+    static void incomingRequestHandler(void*, int /*mask*/);
+
     void resetRequestBuffer();
     void closeSocketsRTSP();
     static void handleAlternativeRequestByte(void*, u_int8_t requestByte);
@@ -64,7 +67,8 @@ protected:
     Boolean authenticationOK(char const* cmdName, char const* urlSuffix, char const* fullRequestStr);
     void changeClientInputSocket(int newSocketNum, unsigned char const* extraData, unsigned extraDataSize);
     void incomingRequestHandler1();
-    UsageEnvironment& envir() { return fEnv; }
+    UsageEnvironment& envir() { return *fEnv; }
+    void closeSockets();
     // Shortcuts for setting up a RTSP response (prior to sending it):
     void setRTSPResponse(char const* responseStr);
     void setRTSPResponse(char const* responseStr, u_int32_t sessionId);
@@ -87,14 +91,12 @@ protected:
     unsigned char fTCPStreamIdCount; // used for (optional) RTP/TCP
     Boolean usesTCPTransport() const { return fTCPStreamIdCount > 0; }
 
-    unsigned fReclamationSeconds;
-
     string fSessionName;
     string fTrackName;
     int fOurSessionId;
 
     //内部建立的循环
-    UsageEnvironment& fEnv;
+    UsageEnvironment* fEnv;
 
     MediaSessionMgr& fMediaSessionMgr;
 };

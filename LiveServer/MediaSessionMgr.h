@@ -27,8 +27,9 @@ class MediaSessionMgr
     typedef MediaSessionMap_t::iterator SessionIt_t;
     typedef pair<string, MyServerMediaSession*> MediaSessionType;
 public:
-    //根据一个名称创建MediaSession
-    MyServerMediaSession* requestMediaSession(char const* streamName);
+    Boolean isMediaSessionExist(string Name);
+
+    Boolean generateSDPDescription(string& Sdp);
 
     //创建一个自定义的MediaSession
     int addServerMediaSession(MyServerMediaSession* serverMediaSession);
@@ -68,14 +69,18 @@ public:
         u_int8_t& destinationTTL, // in out
         Boolean& isMulticast, // out
         Port& serverRTPPort, // out
-        Port& serverRTCPPort, // out
-        void*& streamToken // out
+        Port& serverRTCPPort // out
         );
 
-    Boolean authenticationOK(string Name, string uri, string UserName, string Password,
+    Boolean authentication(string Name, string uri, string UserName,
         string realm, string nonce,
         string& response);
 
+    string Nonce(string Name);
+
+    string Realm(string Name);
+
+    string NewNonce(string Name);
 private:
     virtual MyServerMediaSession*
         lookupServerMediaSession(char const* streamName, Boolean isFirstLookupInSession = True);
@@ -84,7 +89,7 @@ private:
 
     void deleteServerMediaSession(MyServerMediaSession* serverMediaSession);
 
-    unsigned numClientSessions() const { return m_mMediaSessions.size(); }
+    size_t numClientSessions() const { return m_mMediaSessions.size(); }
 private:
     MediaSessionMap_t m_mMediaSessions;
 };

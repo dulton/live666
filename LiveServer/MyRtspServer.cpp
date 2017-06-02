@@ -1,173 +1,107 @@
-/**********
-This library is free software; you can redistribute it and/or modify it under
-the terms of the GNU Lesser General Public License as published by the
-Free Software Foundation; either version 3 of the License, or (at your
-option) any later version. (See <http://www.gnu.org/copyleft/lesser.html>.)
 
-This library is distributed in the hope that it will be useful, but WITHOUT
-ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License for
-more details.
-
-You should have received a copy of the GNU Lesser General Public License
-along with this library; if not, write to the Free Software Foundation, Inc.,
-51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
-**********/
-// "liveMedia"
-// Copyright (c) 1996-2017 Live Networks, Inc.  All rights reserved.
-// A RTSP server
-// Implementation
-
-#include "RTSPServer.hh"
+#include "MyRTSPServer.h"
 #include "RTSPCommon.hh"
-#include "RTSPRegisterSender.hh"
 #include "Base64.hh"
 #include <GroupsockHelper.hh>
+#include <BasicUsageEnvironment.hh>
+#include "MyRTSPClientConnection.h"
 
 ////////// RTSPServer implementation //////////
 
-MyRTSPServer*
-MyRTSPServer::createNew(UsageEnvironment& env, Port ourPort,
-                      UserAuthenticationDatabase* authDatabase,
-                      unsigned reclamationSeconds) {
-    int ourSocket = setUpOurSocket(env, ourPort);
-    if (ourSocket == -1) return NULL;
+#define LISTEN_BACKLOG_SIZE 20
 
-    return new MyRTSPServer(env, ourSocket, ourPort, authDatabase, reclamationSeconds);
+MyRTSPServer::MyRTSPServer(MediaSessionMgr& MediaMgr,UsageEnvironment& env, Port ourPort):Medium(env),
+fMediaMgr(MediaMgr), fHTTPServerSocket(-1), fHTTPServerPort(ourPort)
+{
+    fHTTPServerSocket = setUpOurSocket(env, ourPort);
+    if (fHTTPServerSocket == -1) return ;
+    ignoreSigPipeOnSocket(fHTTPServerSocket); // so that clients on the same host that are killed don't also kill us
+
+    // Arrange to handle connections from others:
+    envir().taskScheduler().turnOnBackgroundReadHandling(fHTTPServerSocket, incomingConnectionHandler, this);
+
 }
 
-char* MyRTSPServer
-::rtspURL(ServerMediaSession const* serverMediaSession, int clientSocket) const {
-    char* urlPrefix = rtspURLPrefix(clientSocket);
-    char const* sessionName = serverMediaSession->streamName();
+int MyRTSPServer::setUpOurSocket(UsageEnvironment& env, Port& ourPort) {
+    int ourSocket = -1;
 
-    char* resultURL = new char[strlen(urlPrefix) + strlen(sessionName) + 1];
-    sprintf(resultURL, "%s%s", urlPrefix, sessionName);
+    do {
+        // The following statement is enabled by default.
+        // Don't disable it (by defining ALLOW_SERVER_PORT_REUSE) unless you know what you're doing.
+#if !defined(ALLOW_SERVER_PORT_REUSE) && !defined(ALLOW_RTSP_SERVER_PORT_REUSE)
+        // ALLOW_RTSP_SERVER_PORT_REUSE is for backwards-compatibility #####
+        NoReuse dummy(env); // Don't use this socket if there's already a local server using it
+#endif
 
-    delete[] urlPrefix;
-    return resultURL;
-}
+        ourSocket = setupStreamSocket(env, ourPort);
+        if (ourSocket < 0) break;
 
-char* MyRTSPServer::rtspURLPrefix(int clientSocket) const {
-    struct sockaddr_in ourAddress;
-    if (clientSocket < 0) {
-        // Use our default IP address in the URL:
-        ourAddress.sin_addr.s_addr = ReceivingInterfaceAddr != 0
-            ? ReceivingInterfaceAddr
-            : ourIPAddress(envir()); // hack
-    } else {
-        SOCKLEN_T namelen = sizeof ourAddress;
-        getsockname(clientSocket, (struct sockaddr*)&ourAddress, &namelen);
-    }
+        // Make sure we have a big send buffer:
+        if (!increaseSendBufferTo(env, ourSocket, 50*1024)) break;
 
-    char urlBuffer[100]; // more than big enough for "rtsp://<ip-address>:<port>/"
+        // Allow multiple simultaneous connections:
+        if (listen(ourSocket, LISTEN_BACKLOG_SIZE) < 0) {
+            env.setResultErrMsg("listen() failed: ");
+            break;
+        }
 
-    portNumBits portNumHostOrder = ntohs(fServerPort.num());
-    if (portNumHostOrder == 554 /* the default port number */) {
-        sprintf(urlBuffer, "rtsp://%s/", AddressString(ourAddress).val());
-    } else {
-        sprintf(urlBuffer, "rtsp://%s:%hu/",
-            AddressString(ourAddress).val(), portNumHostOrder);
-    }
+        if (ourPort.num() == 0) {
+            // bind() will have chosen a port for us; return it also:
+            if (!getSourcePort(env, ourSocket, ourPort)) break;
+        }
 
-    return strDup(urlBuffer);
-}
+        return ourSocket;
+    } while (0);
 
-UserAuthenticationDatabase* MyRTSPServer::setAuthenticationDatabase(UserAuthenticationDatabase* newDB) {
-    UserAuthenticationDatabase* oldDB = fAuthDB;
-    fAuthDB = newDB;
-
-    return oldDB;
-}
-
-Boolean MyRTSPServer::setUpTunnelingOverHTTP(Port httpPort) {
-    fHTTPServerSocket = setUpOurSocket(envir(), httpPort);
-    if (fHTTPServerSocket >= 0) {
-        fHTTPServerPort = httpPort;
-        envir().taskScheduler().turnOnBackgroundReadHandling(fHTTPServerSocket,
-            incomingConnectionHandlerHTTP, this);
-        return True;
-    }
-
-    return False;
+    if (ourSocket != -1) ::closeSocket(ourSocket);
+    return -1;
 }
 
 portNumBits MyRTSPServer::httpServerPortNum() const {
     return ntohs(fHTTPServerPort.num());
 }
 
-char const* MyRTSPServer::allowedCommandNames() {
-    return "OPTIONS, DESCRIBE, SETUP, TEARDOWN, PLAY, PAUSE, GET_PARAMETER, SET_PARAMETER";
-}
-
-UserAuthenticationDatabase* MyRTSPServer::getAuthenticationDatabaseForCommand(char const* /*cmdName*/) {
-    // default implementation
-    return fAuthDB;
-}
-
-Boolean MyRTSPServer::specialClientAccessCheck(int /*clientSocket*/, struct sockaddr_in& /*clientAddr*/, char const* /*urlSuffix*/) {
-    // default implementation
-    return True;
-}
-
-Boolean MyRTSPServer::specialClientUserAccessCheck(int /*clientSocket*/, struct sockaddr_in& /*clientAddr*/,
-                                                 char const* /*urlSuffix*/, char const * /*username*/) {
-    // default implementation; no further access restrictions:
-    return True;
-}
-
-
-MyRTSPServer::MyRTSPServer(UsageEnvironment& env,
-                       int ourSocket, Port ourPort,
-                       UserAuthenticationDatabase* authDatabase,
-                       unsigned reclamationSeconds)
-                       : GenericMediaServer(env, ourSocket, ourPort, reclamationSeconds),
-                       fHTTPServerSocket(-1), fHTTPServerPort(0),
-                       fClientConnectionsForHTTPTunneling(NULL), // will get created if needed
-                       fTCPStreamingDatabase(HashTable::create(ONE_WORD_HASH_KEYS)),
-                       fAuthDB(authDatabase), fAllowStreamingRTPOverTCP(True) {
-}
-
-// A data structure that is used to implement "fTCPStreamingDatabase"
-// (and the "noteTCPStreamingOnSocket()" and "stopTCPStreamingOnSocket()" member functions):
-class streamingOverTCPRecord {
-public:
-    streamingOverTCPRecord(u_int32_t sessionId, unsigned trackNum, streamingOverTCPRecord* next)
-        : fNext(next), fSessionId(sessionId), fTrackNum(trackNum) {
-    }
-    virtual ~streamingOverTCPRecord() {
-        delete fNext;
-    }
-
-    streamingOverTCPRecord* fNext;
-    u_int32_t fSessionId;
-    unsigned fTrackNum;
-};
-
 MyRTSPServer::~MyRTSPServer() {
     // Turn off background HTTP read handling (if any):
     envir().taskScheduler().turnOffBackgroundReadHandling(fHTTPServerSocket);
     ::closeSocket(fHTTPServerSocket);
-
-    cleanup(); // Removes all "ClientSession" and "ClientConnection" objects, and their tables.
-    delete fClientConnectionsForHTTPTunneling;
-
-    // Empty out and close "fTCPStreamingDatabase":
-    streamingOverTCPRecord* sotcp;
-    while ((sotcp = (streamingOverTCPRecord*)fTCPStreamingDatabase->getFirst()) != NULL) {
-        delete sotcp;
-    }
-    delete fTCPStreamingDatabase;
 }
 
 Boolean MyRTSPServer::isRTSPServer() const {
     return True;
 }
 
-void MyRTSPServer::incomingConnectionHandlerHTTP(void* instance, int /*mask*/) {
+void MyRTSPServer::incomingConnectionHandler(void* instance, int /*mask*/)
+{
     MyRTSPServer* server = (MyRTSPServer*)instance;
-    server->incomingConnectionHandlerHTTP();
+    server->incomingConnectionHandlerOnSocket();
 }
-void MyRTSPServer::incomingConnectionHandlerHTTP() {
-    incomingConnectionHandlerOnSocket(fHTTPServerSocket);
+
+void MyRTSPServer::incomingConnectionHandlerOnSocket() {
+    struct sockaddr_in clientAddr;
+    SOCKLEN_T clientAddrLen = sizeof clientAddr;
+    int clientSocket = accept(fHTTPServerSocket, (struct sockaddr*)&clientAddr, &clientAddrLen);
+    if (clientSocket < 0) {
+        int err = envir().getErrno();
+        if (err != EWOULDBLOCK) {
+            envir().setResultErrMsg("accept() failed: ");
+        }
+        return;
+    }
+    ignoreSigPipeOnSocket(clientSocket); // so that clients on the same host that are killed don't also kill us
+    makeSocketNonBlocking(clientSocket);
+    increaseSendBufferTo(envir(), clientSocket, 50*1024);
+
+#ifdef DEBUG
+    envir() << "accept()ed connection from " << AddressString(clientAddr).val() << "\n";
+#endif
+
+    //这里指望MyRTSPClientConnection自己删除自己。不知道行不行
+    new  MyRTSPClientConnection(fMediaMgr, clientSocket, clientAddr);
+}
+
+int MyRTSPServer::Run()
+{
+    envir().taskScheduler().doEventLoop();
+    return 0;
 }
